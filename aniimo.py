@@ -72,7 +72,15 @@ def get_articles():
                 continue
 
             article_id = match.group(1)
-            title = link["title"].strip()
+            raw_title = link["title"].strip()
+
+            lines = [
+                line.strip()
+                for line in raw_title.splitlines()
+                if line.strip()
+            ]
+
+            title = lines[0] if lines else ""
 
             if article_id not in articles:
                 articles[article_id] = {
