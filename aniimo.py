@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 import requests
-from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
 ANIIMO_URL = "https://www.aniimo.com/fr/newslist"
 STATE_FILE = Path("aniimo_seen.json")
@@ -16,57 +16,85 @@ ROLE_ID = os.environ.get("ANIIMO_ROLE_ID", "")
 
 KEYWORDS = (
     "patch", "update", "maintenance", "hotfix",
-    "bug fix", "bugfix", "fixes", "version",
+    "bugfix", "bug fix", "fixes", "version",
     "mise à jour", "correctif", "correction",
-    "maintenance", "équilibrage"
+    "équilibrage", "notes de version"
 )
 
 
 def get_articles():
-    response = requests.get(
-        ANIIMO_URL,
-        headers={"User-Agent": "Mozilla/5.0"},
-        timeout=30
-    )
-    response.raise_for_status()
-
-    soup = BeautifulSoup(response.text, "html.parser")
     articles = {}
 
-    for link in soup.find_all("a", href=True):
-        url = urljoin(ANIIMO_URL, link["href"])
-        parsed = urlparse(url)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
 
-        if parsed.netloc not in ("aniimo.com", "www.aniimo.com"):
-            continue
+        page = browser.new_page(
+            locale="fr-FR",
+            user_agent=(
+                "Mozilla/5.0 (X11; Linux x86_64) "
+                "AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
+            )
+        )
 
-        if not re.search(r"/newslist/detail/\d+", parsed.path):
-            continue
+        page.goto(
+            ANIIMO_URL,
+            wait_until="domcontentloaded",
+            timeout=60000
+        )
 
-        title = link.get_text(" ", strip=True)
+        page.wait_for_timeout(8000)
 
-        if not title:
-            parent = link.parent
-            title = parent.get_text(" ", strip=True) if parent else ""
+        print("Titre de la page :", page.title())
+        print("URL actuelle :", page.url)
 
-        article_id = re.search(r"/detail/(\d+)", parsed.path).group(1)
+        links = page.locator("a[href]").evaluate_all(
+            """elements => elements.map(element => ({
+                href: element.href,
+                title: element.innerText.trim()
+            }))"""
+        )
 
-        if article_id not in articles:
-            articles[article_id] = {
-                "title": title or f"Actualité Aniimo #{article_id}",
-                "url": url
-            }
+        print("Nombre de liens trouvés :", len(links))
+
+        for link in links:
+            url = urljoin(ANIIMO_URL, link["href"])
+            parsed = urlparse(url)
+
+            if parsed.netloc not in ("aniimo.com", "www.aniimo.com"):
+                continue
+
+            match = re.search(
+                r"/newslist/detail/(\d+)",
+                parsed.path
+            )
+
+            if not match:
+                continue
+
+            article_id = match.group(1)
+            title = link["title"].strip()
+
+            if article_id not in articles:
+                articles[article_id] = {
+                    "title": title or f"Actualité Aniimo #{article_id}",
+                    "url": url
+                }
+
+        browser.close()
 
     return articles
 
 
 def is_update(title):
-    return any(word in title.lower() for word in KEYWORDS)
+    return any(
+        keyword in title.lower()
+        for keyword in KEYWORDS
+    )
 
 
 def send_discord(article):
     if not WEBHOOK_URL:
-        raise RuntimeError("Secret DISCORD_WEBHOOK_URL manquant")
+        raise RuntimeError("Webhook Discord manquant")
 
     mention = f"<@&{ROLE_ID}>" if ROLE_ID else ""
 
@@ -81,40 +109,66 @@ def send_discord(article):
                 "title": "🥚 ANIIMO | Nouvelle mise à jour",
                 "description": (
                     f"**{article['title']}**\n\n"
-                    "Une nouvelle publication officielle est disponible !\n\n"
-                    f"📋 [Consulter l'article]({article['url']})"
+                    "Une nouvelle publication officielle "
+                    "est disponible !\n\n"
+                    f"📋 [Lire l'article officiel]({article['url']})"
                 ),
                 "color": 16757570,
                 "footer": {
                     "text": "Aniimo • Actualités officielles"
                 },
-                "timestamp": datetime.now(timezone.utc).isoformat()
+                "timestamp": datetime.now(
+                    timezone.utc
+                ).isoformat()
             }
         ]
     }
 
-    response = requests.post(WEBHOOK_URL, json=payload, timeout=30)
+    response = requests.post(
+        WEBHOOK_URL,
+        json=payload,
+        timeout=30
+    )
+
     response.raise_for_status()
 
 
 def main():
     articles = get_articles()
+
     print(f"Articles détectés : {len(articles)}")
+
+    for article in articles.values():
+        print(
+            f"Article : {article['title']} | "
+            f"{article['url']}"
+        )
 
     if not articles:
         raise RuntimeError(
-            "Aucun article trouvé. Vérifier la structure du site Aniimo."
+            "Aucun article détecté avec Playwright."
         )
 
     if not STATE_FILE.exists():
         STATE_FILE.write_text(
-            json.dumps(list(articles.keys()), indent=2),
+            json.dumps(
+                sorted(articles.keys()),
+                indent=2
+            ),
             encoding="utf-8"
         )
-        print("Première exécution : articles existants mémorisés.")
+
+        print(
+            "Première exécution : "
+            "articles existants mémorisés."
+        )
         return
 
-    seen = set(json.loads(STATE_FILE.read_text(encoding="utf-8")))
+    seen = set(
+        json.loads(
+            STATE_FILE.read_text(encoding="utf-8")
+        )
+    )
 
     for article_id, article in articles.items():
         if article_id in seen:
@@ -122,9 +176,13 @@ def main():
 
         if is_update(article["title"]):
             send_discord(article)
-            print(f"Annonce envoyée : {article['title']}")
+            print(
+                f"Annonce envoyée : {article['title']}"
+            )
         else:
-            print(f"Actualité ignorée : {article['title']}")
+            print(
+                f"Actualité ignorée : {article['title']}"
+            )
 
         seen.add(article_id)
 
