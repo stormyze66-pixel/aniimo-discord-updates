@@ -35,7 +35,6 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           ANIIMO_ROLE_ID: ${{ secrets.ANIIMO_ROLE_ID }}
-          TEST_DISCORD: "true"
         run: python aniimo.py
 
       - name: Enregistrer les articles detectes
