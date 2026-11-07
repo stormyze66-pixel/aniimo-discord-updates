@@ -193,4 +193,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if os.environ.get("TEST_DISCORD") == "true":
+        print("Envoi d'une notification de test Discord...")
+
+        send_discord({
+            "title": "TEST — Mise à jour Aniimo",
+            "url": "https://www.aniimo.com/fr/newslist/detail/100277"
+        })
+
+        print("Notification de test envoyée avec succès !")
+    else:
+        main()
