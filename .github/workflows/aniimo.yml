@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: "7,37 * * * *"
 
-    workflow_dispatch:
+  workflow_dispatch:
     inputs:
       resend_article_id:
         description: "Identifiant de l'article à renvoyer (facultatif)"
@@ -40,7 +40,7 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           ANIIMO_ROLE_ID: ${{ secrets.ANIIMO_ROLE_ID }}
-                    RESEND_ARTICLE_ID: ${{ inputs.resend_article_id }}
+          RESEND_ARTICLE_ID: ${{ inputs.resend_article_id }}
         run: python aniimo.py
 
       - name: Enregistrer les articles detectes
