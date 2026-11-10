@@ -40,6 +40,7 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           ANIIMO_ROLE_ID: ${{ secrets.ANIIMO_ROLE_ID }}
+                    RESEND_ARTICLE_ID: ${{ inputs.resend_article_id }}
         run: python aniimo.py
 
       - name: Enregistrer les articles detectes
