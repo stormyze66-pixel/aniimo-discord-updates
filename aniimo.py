@@ -201,7 +201,26 @@ def main():
 
 
 if __name__ == "__main__":
-    if os.environ.get("TEST_DISCORD") == "true":
+    if os.environ.get("RESEND_ARTICLE_ID"):
+        article_id = os.environ["RESEND_ARTICLE_ID"].strip()
+
+        if not re.fullmatch(r"\d+", article_id):
+            raise ValueError("Identifiant d'article invalide")
+
+        articles = get_articles()
+
+        if article_id not in articles:
+            raise RuntimeError(
+                f"Article {article_id} introuvable sur Aniimo."
+            )
+
+        article = articles[article_id]
+
+        print(f"Renvoi manuel : {article['title']}")
+        send_discord(article)
+        print("Notification envoyée avec succès !")
+
+    elif os.environ.get("TEST_DISCORD") == "true":
         print("Envoi d'une notification de test Discord...")
 
         send_discord({
@@ -210,5 +229,6 @@ if __name__ == "__main__":
         })
 
         print("Notification de test envoyée avec succès !")
+
     else:
         main()
